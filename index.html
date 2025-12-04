@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测测你是什么动物 🐾</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">测测你是什么动物 🐾</h1>
+        
+        <div class="test-area">
+            <div class="instructions">👇 长按这里测试</div>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar"></div>
+                <div class="progress-text" id="progressText">0%</div>
+            </div>
+            <div class="long-press-area" id="longPressArea">
+                <div class="press-text">长按屏幕中间区域，看看你是什么动物！</div>
+            </div>
+        </div>
+        
+        <div class="result-container" id="resultContainer" style="display: none;">
+            <div class="result-icon" id="resultIcon">🐷</div>
+            <div class="result-text" id="resultText">你是一只可爱的小猪猪！</div>
+        </div>
+        
+        <div class="hint" id="hint">提示：结果已保存，刷新不会改变哦！</div>
+        
+        <div class="theme-toggle">
+            <button id="themeToggle">🌙 切换深色模式</button>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
