@@ -287,42 +287,51 @@
         // --- 5. MediaPipe 手势追踪 ---
         async function initHandTracking() {
             const videoElement = document.getElementById('input-video');
+            const loader = document.getElementById('loader');
 
-            const hands = new Hands({
-                locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
-                }
-            });
-
-            hands.setOptions({
-                maxNumHands: 1,
-                modelComplexity: 1,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
-            });
-
-            hands.onResults(onResults);
-
-            const cameraUtils = new Camera(videoElement, {
-                onFrame: async () => {
-                    try {
-                        await hands.send({image: videoElement});
-                    } catch (error) {
-                        console.error('发送视频帧失败:', error);
+            try {
+                // 初始化Hands模型
+                const hands = new Hands({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
                     }
-                },
-                width: 320,
-                height: 240
-            });
-
-            cameraUtils.start()
-                .then(() => {
-                    document.getElementById('loader').style.opacity = 0;
-                })
-                .catch(err => {
-                    document.getElementById('loader').innerText = "无法访问摄像头，请检查权限。";
-                    console.error(err);
                 });
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                hands.onResults(onResults);
+
+                // 初始化摄像头
+                const cameraUtils = new Camera(videoElement, {
+                    onFrame: async () => {
+                        try {
+                            await hands.send({image: videoElement});
+                        } catch (error) {
+                            console.error('发送视频帧失败:', error);
+                        }
+                    },
+                    width: 320,
+                    height: 240
+                });
+
+                // 启动摄像头并隐藏加载提示
+                await cameraUtils.start();
+                
+                // 等待几帧以确保模型加载完成并开始处理
+                setTimeout(() => {
+                    loader.style.opacity = 0;
+                    console.log('摄像头和AI模型已成功启动');
+                }, 2000); // 2秒后隐藏加载提示
+                
+            } catch (err) {
+                loader.innerText = "无法访问摄像头，请检查权限。";
+                console.error('摄像头初始化失败:', err);
+            }
         }
 
         function onResults(results) {
