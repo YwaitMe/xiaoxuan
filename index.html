@@ -3,18 +3,641 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>大型烟花表演</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Three.js 交互式 3D 粒子系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            background-color: #0a0a0a;
+            color: white;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas {
+            display: block;
+        }
+
+        #video-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border-radius: 8px;
+            background-color: rgba(0, 0, 0, 0.3);
+            z-index: 10;
+            overflow: hidden;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+
+        #skeleton-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            pointer-events: none;
+            z-index: 11;
+        }
+
+        #status {
+            position: absolute;
+            top: 150px;
+            right: 20px;
+            width: 160px;
+            text-align: center;
+            font-size: 12px;
+            padding: 8px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+            z-index: 10;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 250px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #ddd;
+        }
+
+        #model-buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .model-btn {
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 13px;
+        }
+
+        .model-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .model-btn.active {
+            background-color: #ff69b4;
+            box-shadow: 0 0 10px rgba(255, 105, 180, 0.5);
+        }
+
+        #color-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .color-picker {
+            width: 100%;
+            height: 40px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #fullscreen-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        #fullscreen-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+    </style>
 </head>
 <body>
-    <canvas id="fireworksCanvas"></canvas>
-    <div class="controls">
-        <button id="startBtn">开始表演</button>
-        <button id="stopBtn">停止表演</button>
-        <button id="resetBtn">重置</button>
-        <input type="range" id="fireworkCount" min="1" max="10" value="3" step="1">
-        <label for="fireworkCount">烟花数量: 3</label>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        <div id="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="skeleton-canvas"></canvas>
+        </div>
+        <div id="status">等待摄像头就绪...</div>
+        <div id="controls">
+            <div id="model-buttons">
+                <button class="model-btn active" data-model="heart">爱心</button>
+                <button class="model-btn" data-model="flower">花朵</button>
+                <button class="model-btn" data-model="saturn">土星</button>
+                <button class="model-btn" data-model="fireworks">烟花</button>
+            </div>
+            <div class="control-group">
+                <label>主色调</label>
+                <input type="color" id="primary-color" class="color-picker" value="#ff69b4">
+            </div>
+            <div class="control-group">
+                <label>辅助色</label>
+                <input type="color" id="secondary-color" class="color-picker" value="#ffffff">
+            </div>
+            <button id="fullscreen-btn">全屏</button>
+        </div>
     </div>
-    <script src="script.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose@0.1.0/dist/handpose.min.js"></script>
+
+    <script>
+        class ParticleSystem {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.particles = null;
+                this.geometry = null;
+                this.material = null;
+                this.video = null;
+                this.skeletonCanvas = null;
+                this.skeletonCtx = null;
+                this.handpose = null;
+                this.scalingFactor = 1.0;
+                this.targetScale = 1.0;
+                this.currentModel = 'heart';
+                this.primaryColor = '#ff69b4';
+                this.secondaryColor = '#ffffff';
+                this.originalPositions = null;
+                this.isCalibrated = false;
+                this.baseHandDistance = 0;
+                this.lastHandDetected = false;
+                this.handDetectionCount = 0;
+                this.autoRotate = true;
+                this.rotationSpeed = 0.005;
+                
+                this.init();
+            }
+
+            init() {
+                this.setupScene();
+                this.setupCamera();
+                this.setupRenderer();
+                this.setupEventListeners();
+                this.setupVideo();
+                this.setupHandPose();
+                this.createParticles();
+                this.animate();
+            }
+
+            setupScene() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x0a0a0a);
+            }
+
+            setupCamera() {
+                this.camera = new THREE.PerspectiveCamera(
+                    75,
+                    window.innerWidth / window.innerHeight,
+                    0.1,
+                    1000
+                );
+                this.camera.position.z = 5;
+            }
+
+            setupRenderer() {
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: document.getElementById('canvas'),
+                    antialias: true,
+                    alpha: true
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            }
+
+            setupEventListeners() {
+                window.addEventListener('resize', () => this.onWindowResize());
+                
+                // 模型按钮事件
+                document.querySelectorAll('.model-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        this.currentModel = e.target.dataset.model;
+                        this.updateModelButtons();
+                        this.createParticles();
+                    });
+                });
+
+                // 颜色选择器事件
+                document.getElementById('primary-color').addEventListener('input', (e) => {
+                    this.primaryColor = e.target.value;
+                    this.updateParticleColors();
+                });
+
+                document.getElementById('secondary-color').addEventListener('input', (e) => {
+                    this.secondaryColor = e.target.value;
+                    this.updateParticleColors();
+                });
+
+                // 全屏按钮事件
+                document.getElementById('fullscreen-btn').addEventListener('click', () => {
+                    this.toggleFullscreen();
+                });
+            }
+
+            setupVideo() {
+                this.video = document.getElementById('video');
+                this.skeletonCanvas = document.getElementById('skeleton-canvas');
+                this.skeletonCtx = this.skeletonCanvas.getContext('2d');
+                
+                // 设置骨骼Canvas尺寸
+                this.skeletonCanvas.width = this.video.clientWidth;
+                this.skeletonCanvas.height = this.video.clientHeight;
+                
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: 480,
+                        height: 360,
+                        frameRate: 15
+                    }
+                })
+                .then(stream => {
+                    this.video.srcObject = stream;
+                    return this.video.play();
+                })
+                .catch(err => {
+                    console.error('无法访问摄像头:', err);
+                    document.getElementById('status').textContent = '无法访问摄像头';
+                });
+            }
+
+            setupHandPose() {
+                handpose.load({
+                    architecture: 'MobileNetV1',
+                    detectionConfidence: 0.5, // 降低置信度阈值，更容易检测到手
+                    inputResolution: { width: 256, height: 256 },
+                    multiplier: 0.8 // 增加模型复杂度，提高检测精度
+                })
+                .then(model => {
+                    this.handpose = model;
+                    document.getElementById('status').textContent = '手势检测就绪';
+                    this.detectHands();
+                })
+                .catch(err => {
+                    console.error('手势模型加载失败:', err);
+                    document.getElementById('status').textContent = '手势模型加载失败';
+                });
+            }
+
+            async detectHands() {
+                if (!this.handpose || !this.video || !this.video.readyState) {
+                    requestAnimationFrame(() => this.detectHands());
+                    return;
+                }
+
+                try {
+                    const predictions = await this.handpose.estimateHands(this.video, false);
+                    
+                    // 清除骨骼Canvas
+                    this.clearSkeleton();
+                    
+                    if (predictions.length > 0) {
+                        const hand = predictions[0];
+                        const indexFingerTip = hand.landmarks[8];
+                        const thumbTip = hand.landmarks[4];
+                        
+                        // 绘制手部骨骼
+                        this.drawHandSkeleton(hand);
+                        
+                        // 计算食指尖和拇指尖的三维距离
+                        const distance = Math.hypot(
+                            indexFingerTip[0] - thumbTip[0],
+                            indexFingerTip[1] - thumbTip[1],
+                            indexFingerTip[2] - thumbTip[2]
+                        );
+
+                        if (!this.isCalibrated) {
+                            // 首次检测到手，进行校准
+                            this.baseHandDistance = distance;
+                            this.isCalibrated = true;
+                            this.handDetectionCount = 0;
+                            document.getElementById('status').textContent = '🎯 校准完成！请张合手指控制缩放（建议距离：10-20cm）';
+                        } else {
+                            // 使用相对距离计算缩放比例，并增加灵敏度
+                            const scaleRatio = distance / this.baseHandDistance;
+                            // 增加缩放范围，让控制更明显
+                            this.targetScale = THREE.MathUtils.clamp(scaleRatio, 0.3, 3.0);
+                            this.handDetectionCount = 0;
+                        }
+                        
+                        this.lastHandDetected = true;
+                    } else {
+                        // 没有检测到手
+                        this.handDetectionCount++;
+                        
+                        if (this.lastHandDetected && this.handDetectionCount > 15) { // 增加未检测到的帧数阈值
+                            // 手离开一段时间后重置校准
+                            this.isCalibrated = false;
+                            this.lastHandDetected = false;
+                            document.getElementById('status').textContent = '👋 手已离开，请重新放置手进行校准';
+                        } else if (this.handDetectionCount > 5) {
+                            document.getElementById('status').textContent = '👀 请将手放在摄像头前，保持手掌朝向摄像头';
+                        }
+                    }
+                } catch (err) {
+                    console.error('手势检测失败:', err);
+                }
+
+                requestAnimationFrame(() => this.detectHands());
+            }
+
+            createParticles() {
+                // 清除旧粒子
+                if (this.particles) {
+                    this.scene.remove(this.particles);
+                    this.geometry.dispose();
+                    this.material.dispose();
+                }
+
+                const particleCount = 2000;
+                this.geometry = new THREE.BufferGeometry();
+                
+                const positions = new Float32Array(particleCount * 3);
+                const colors = new Float32Array(particleCount * 3);
+                
+                const primaryColor = new THREE.Color(this.primaryColor);
+                const secondaryColor = new THREE.Color(this.secondaryColor);
+                
+                this.originalPositions = new Float32Array(particleCount * 3);
+
+                for (let i = 0; i < particleCount; i++) {
+                    let x, y, z;
+                    const colorRatio = Math.random();
+                    
+                    switch (this.currentModel) {
+                        case 'heart':
+                            // 实心爱心形状
+                            const t = Math.random() * Math.PI * 2;
+                            const s = Math.random();
+                            const r = 1 - s * 0.5;
+                            x = 16 * Math.pow(Math.sin(t), 3) * r;
+                            y = (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * r;
+                            z = (Math.random() - 0.5) * 2;
+                            // 添加随机偏移使爱心更饱满
+                            x += (Math.random() - 0.5) * 0.3;
+                            y += (Math.random() - 0.5) * 0.3;
+                            break;
+                            
+                        case 'flower':
+                            // 花朵形状
+                            const petalCount = 6;
+                            const angle = Math.random() * Math.PI * 2;
+                            const radius = Math.random() * 0.5 + 0.5;
+                            const petal = Math.floor(Math.random() * petalCount);
+                            const petalAngle = (Math.PI * 2 / petalCount) * petal + angle;
+                            x = Math.cos(petalAngle) * radius + (Math.random() - 0.5) * 0.2;
+                            y = Math.sin(petalAngle) * radius + (Math.random() - 0.5) * 0.2;
+                            z = (Math.random() - 0.5) * 3;
+                            break;
+                            
+                        case 'saturn':
+                            // 土星形状
+                            const ringRadius = Math.random() * 2 + 2;
+                            const ringAngle = Math.random() * Math.PI * 2;
+                            x = Math.cos(ringAngle) * ringRadius;
+                            y = (Math.random() - 0.5) * 0.5;
+                            z = Math.sin(ringAngle) * ringRadius;
+                            // 添加土星环厚度
+                            x += (Math.random() - 0.5) * 0.5;
+                            z += (Math.random() - 0.5) * 0.5;
+                            break;
+                            
+                        case 'fireworks':
+                            // 烟花形状
+                            const fireworkAngle = Math.random() * Math.PI * 2;
+                            const fireworkHeight = Math.random() * 2 + 1;
+                            const fireworkRadius = Math.random() * fireworkHeight * 0.5;
+                            x = Math.cos(fireworkAngle) * fireworkRadius;
+                            y = fireworkHeight;
+                            z = Math.sin(fireworkAngle) * fireworkRadius;
+                            break;
+                    }
+
+                    positions[i * 3] = x;
+                    positions[i * 3 + 1] = y;
+                    positions[i * 3 + 2] = z;
+                    
+                    // 保存原始位置用于缩放
+                    this.originalPositions[i * 3] = x;
+                    this.originalPositions[i * 3 + 1] = y;
+                    this.originalPositions[i * 3 + 2] = z;
+                    
+                    // 设置颜色（粉色和白色）
+                    if (colorRatio < 0.7 || this.currentModel === 'heart') {
+                        // 爱心形状更多粉色粒子
+                        colors[i * 3] = primaryColor.r;
+                        colors[i * 3 + 1] = primaryColor.g;
+                        colors[i * 3 + 2] = primaryColor.b;
+                    } else {
+                        colors[i * 3] = secondaryColor.r;
+                        colors[i * 3 + 1] = secondaryColor.g;
+                        colors[i * 3 + 2] = secondaryColor.b;
+                    }
+                }
+
+                this.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                this.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+                this.material = new THREE.PointsMaterial({
+                    size: 0.15,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.8,
+                    blending: THREE.AdditiveBlending
+                });
+
+                this.particles = new THREE.Points(this.geometry, this.material);
+                this.scene.add(this.particles);
+            }
+
+            updateParticlesScale() {
+                if (!this.particles || !this.originalPositions) return;
+
+                // 增加lerp系数，让响应更灵敏
+                this.scalingFactor = THREE.MathUtils.lerp(this.scalingFactor, this.targetScale, 0.3);
+                
+                const positions = this.geometry.attributes.position.array;
+                
+                // 更新所有粒子的位置
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i] = this.originalPositions[i] * this.scalingFactor;
+                    positions[i + 1] = this.originalPositions[i + 1] * this.scalingFactor;
+                    positions[i + 2] = this.originalPositions[i + 2] * this.scalingFactor;
+                }
+                
+                this.geometry.attributes.position.needsUpdate = true;
+                
+                // 添加缩放百分比提示
+                if (this.isCalibrated) {
+                    const scalePercent = Math.round((this.scalingFactor - 1) * 100);
+                    const statusText = `🎮 控制中 - 缩放: ${scalePercent > 0 ? '+' : ''}${scalePercent}%`;
+                    document.getElementById('status').textContent = statusText;
+                }
+            }
+
+            updateParticleColors() {
+                if (!this.particles) return;
+
+                const colors = this.geometry.attributes.color.array;
+                const primaryColor = new THREE.Color(this.primaryColor);
+                const secondaryColor = new THREE.Color(this.secondaryColor);
+                
+                for (let i = 0; i < colors.length; i += 3) {
+                    const colorRatio = Math.random();
+                    if (colorRatio < 0.7 || this.currentModel === 'heart') {
+                        colors[i] = primaryColor.r;
+                        colors[i + 1] = primaryColor.g;
+                        colors[i + 2] = primaryColor.b;
+                    } else {
+                        colors[i] = secondaryColor.r;
+                        colors[i + 1] = secondaryColor.g;
+                        colors[i + 2] = secondaryColor.b;
+                    }
+                }
+                
+                this.geometry.attributes.color.needsUpdate = true;
+            }
+
+            updateModelButtons() {
+                document.querySelectorAll('.model-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.querySelector(`[data-model="${this.currentModel}"]`).classList.add('active');
+            }
+
+            toggleFullscreen() {
+                if (!document.fullscreenElement) {
+                    document.getElementById('container').requestFullscreen();
+                } else {
+                    document.exitFullscreen();
+                }
+            }
+
+            clearSkeleton() {
+                if (this.skeletonCtx) {
+                    this.skeletonCtx.clearRect(0, 0, this.skeletonCanvas.width, this.skeletonCanvas.height);
+                }
+            }
+
+            drawHandSkeleton(hand) {
+                if (!this.skeletonCtx || !hand) return;
+                
+                const landmarks = hand.landmarks;
+                const widthRatio = this.skeletonCanvas.width / 480; // 视频实际宽度是480px
+                const heightRatio = this.skeletonCanvas.height / 360; // 视频实际高度是360px
+                
+                // 定义骨骼连接
+                const connections = [
+                    // 拇指
+                    [0, 1], [1, 2], [2, 3], [3, 4],
+                    // 食指
+                    [0, 5], [5, 6], [6, 7], [7, 8],
+                    // 中指
+                    [0, 9], [9, 10], [10, 11], [11, 12],
+                    // 无名指
+                    [0, 13], [13, 14], [14, 15], [15, 16],
+                    // 小指
+                    [0, 17], [17, 18], [18, 19], [19, 20],
+                    // 手掌
+                    [5, 9], [9, 13], [13, 17]
+                ];
+                
+                // 绘制骨骼连接线
+                this.skeletonCtx.strokeStyle = '#ff69b4';
+                this.skeletonCtx.lineWidth = 2;
+                this.skeletonCtx.lineCap = 'round';
+                
+                connections.forEach(connection => {
+                    const [startIdx, endIdx] = connection;
+                    const start = landmarks[startIdx];
+                    const end = landmarks[endIdx];
+                    
+                    this.skeletonCtx.beginPath();
+                    this.skeletonCtx.moveTo(start[0] * widthRatio, start[1] * heightRatio);
+                    this.skeletonCtx.lineTo(end[0] * widthRatio, end[1] * heightRatio);
+                    this.skeletonCtx.stroke();
+                });
+                
+                // 绘制关键点
+                this.skeletonCtx.fillStyle = '#ffffff';
+                landmarks.forEach(landmark => {
+                    this.skeletonCtx.beginPath();
+                    this.skeletonCtx.arc(landmark[0] * widthRatio, landmark[1] * heightRatio, 3, 0, Math.PI * 2);
+                    this.skeletonCtx.fill();
+                });
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                
+                // 更新骨骼Canvas尺寸
+                if (this.skeletonCanvas && this.video) {
+                    this.skeletonCanvas.width = this.video.clientWidth;
+                    this.skeletonCanvas.height = this.video.clientHeight;
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                // 更新粒子缩放
+                this.updateParticlesScale();
+                
+                // 自动旋转
+                if (this.autoRotate && this.particles) {
+                    this.particles.rotation.y += this.rotationSpeed;
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // 初始化粒子系统
+        window.addEventListener('DOMContentLoaded', () => {
+            new ParticleSystem();
+        });
+    </script>
 </body>
 </html>
