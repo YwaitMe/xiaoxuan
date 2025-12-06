@@ -319,18 +319,20 @@
                     height: 240
                 });
 
-                // 启动摄像头并隐藏加载提示
-                await cameraUtils.start();
+                // 使用Promise.race设置摄像头启动超时
+                const cameraStartPromise = cameraUtils.start();
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('摄像头启动超时')), 3000);
+                });
+
+                // 尝试启动摄像头，最多等待3秒
+                await Promise.race([cameraStartPromise, timeoutPromise]);
                 
-                // 等待几帧以确保模型加载完成并开始处理
-                setTimeout(() => {
-                    loader.style.opacity = 0;
-                    console.log('摄像头和AI模型已成功启动');
-                }, 2000); // 2秒后隐藏加载提示
+                console.log('摄像头已成功启动');
                 
             } catch (err) {
-                loader.innerText = "无法访问摄像头，请检查权限。";
-                console.error('摄像头初始化失败:', err);
+                console.error('摄像头或AI模型初始化问题:', err);
+                // 不要在这里修改加载提示，让全局超时机制来处理
             }
         }
 
@@ -396,7 +398,18 @@
             createParticles();
             initGUI();
             animate();
-            initHandTracking(); // 最后启动摄像头，因为比较耗时
+            
+            // 启动摄像头
+            initHandTracking();
+            
+            // 添加全局超时机制，确保无论如何加载提示都会被隐藏
+            setTimeout(() => {
+                const loader = document.getElementById('loader');
+                if (loader.style.opacity !== '0') {
+                    loader.style.opacity = '0';
+                    console.log('加载超时，已自动隐藏加载提示');
+                }
+            }, 5000); // 5秒后强制隐藏
         }
 
     </script>
