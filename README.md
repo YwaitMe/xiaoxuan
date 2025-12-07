@@ -70,13 +70,13 @@
 
 ## 启动方法
 
-1. 直接在浏览器中打开 `index.html` 文件
+1. 直接在浏览器中打开 `index.html` 或 `gesture-particle.html` 文件
 2. 或使用本地服务器运行：
    ```bash
    # 使用Python 3
    python -m http.server 8000
    
-   # 然后在浏览器中访问 http://localhost:8000
+   # 然后在浏览器中访问 http://localhost:8000/index.html 或 http://localhost:8000/gesture-particle.html
    ```
 
 ## 系统要求
@@ -88,7 +88,12 @@
 
 ## 更新日志
 
-### v2.0 (最新)
+### v2.1 (最新)
+- ✅ 修复Hands模块导入错误，确保系统稳定运行
+- ✅ 添加新的gesture-particle.html文件，优化手势控制逻辑
+- ✅ 提高模型加载速度和稳定性
+
+### v2.0
 - ✅ 优化手势检测算法，提高控制灵敏度
 - ✅ 增加手部骨骼可视化显示
 - ✅ 扩大缩放范围（0.3-3.0倍）
