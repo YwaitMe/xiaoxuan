@@ -1,6 +1,7 @@
 # 豪华3D粒子树 - 手势控制
 
 一个基于Three.js和MediaPipe的交互式3D粒子系统，支持手势控制和图像上传功能。
+在线演示：https://ywaitme.github.io/xiaoxuan/
 
 ## 手势操作指南
 
